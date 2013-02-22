@@ -1,0 +1,17 @@
+/* file consists of a list of
+	repo	REPONAME
+		ACCESSLEVEL				= USERLIST
+
+	so we parse for a list of these units. Make sure file terminates in one or more newlines!
+*/
+
+start = ((decl:declaration "\n"* flds:fields confs:configs "\n"*){ return { name: decl, access: flds, configuration: confs}})+
+
+// Declaration is the line "repo 	REPONAME" where we return REPONAME.
+declaration = "repo"[ ]*nm:[^ \n]* [ ]*"\n" { return nm.join(""); }
+
+fields = (([ ]* ac:[A-Z+]* [ ]* "=" usrs:users "\n"){ return { "level": ac.join(""), "users":usrs}; })+
+
+configs = ( ([ ]* "config" [ ]* id:[a-zA-Z.0-9]+ [ ]* "=" us:users "\n"){ return { "key": id.join(""), "val":us.join("") } } )*
+
+users = (( " " un:[a-zA-Z_0-9@]* ) { return un.join(""); })+

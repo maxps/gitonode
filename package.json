@@ -6,7 +6,8 @@
 	"dependencies":{
 		"coffee-script": ">=1.4.0",
 		"underscore": ">=1.4.2",
-		"node-git": ">=0.0.1"
+		"gift": ">=0.0.1",
+		"pegjs": "latest"
 	},
 	"keywords": [
 		"gitolite",

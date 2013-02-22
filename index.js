@@ -1,2 +1,2 @@
 require("coffee-script");
-module.exports = require("./lib/gitonode")
+module.exports = require("./src/gitonode")

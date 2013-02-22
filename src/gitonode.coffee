@@ -20,42 +20,27 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ###
 
 require 'underscore'
-git = require 'nodegit'
+#ngit = require 'gift'
+path = require 'path'
+fs = require 'fs'
+peg = require 'pegjs'
+{exec} = require 'child_process'
+
 module.exports = ->
 	###
 	 	Main Constructor
 
 	 	Params:
 
-	 		- "server address"
-	 		- "username [default=git]"
-	 		- "options hash"
+	 		- location to root of initialized git repository for gitolite
 	###
-	###
-	Gitonode = (serveraddress, username, options)=>
-		@options = _.extend
-			location: '/var/tmp'
-			username: if username then username else "git"
-		, options || {}
-		@options.address = serveraddress
-	
-	Gitonode.prototype.###
-
-	all = "@all"  # Constant
-	class GitonodeErr
-		constructor: (@errCode,@errString)->
-			@
-		getCode: ()->
-			@errCode
-		getMessage: ()->
-			@errString
 	class Gitonode
-		constructor: (serveraddress, username, options)->
-			@options = _.extend
-				location: '/var/tmp'
-				username: if username then username else "git"
-			, options || {}
-			@options.address = serveraddress
+		constructor: (loc)->
+			# Modify passed location to get the actual git directory
+			@location = path.normalize(loc)
+			# Check for consistency of repository
+			if !fs.existsSync(path.join(@location,'.git'))
+				throw "No git repository at location"
 
 			# Note that we have not yet pulled in anything
 			@dirty = false
@@ -65,10 +50,104 @@ module.exports = ->
 			@users = []
 			@repos = []
 
+			# Reload
+			try
+				reload()
+			catch (err)
+				throw err
+
+			if !checkValidity()
+				throw "Invalid gitolite repository at location"
+
+			# Instantiate the parser
+			@parser = peg.buildParser fs.readFileSync './schema.peg', 'utf-8'
+
 			@
 		
+		checkValidity: ->
+			# Check to make sure our repository contains the proper files
+			if fs.existsSync(path.join(@location,'conf/gitlite.conf')) && fs.existsSync(path.join(@location,'keydir'))
+				return true
+			else
+				return false
+		fetchUser: (username)->
+			users.forEach (user)->
+				if user.name is username
+					return user
+			return null
+		populateModels: (callback)->
+			# Assumes we have already created a valid git repository
+			# parse gitolite config
+			config = path.join(@location,'conf/gitolite.conf')
+			keys = path.join(@location,'keydir')
+			fs.readFile config, (err,data)->
+				if err
+					throw err
+				# ensure file ends with a newline
+				data = data + "\n \n"
+				try
+					presult = @parser.parse data
+					# Traverse the generated tree and create the repos, groups, and users modules as appropriate.
+					presult.forEach (repo)->
+						# Construct the repository object
+						rname = repo.name
+						# Find all users and relevant access levels
+						rusrs = []
+						repo.access.forEach (alevel)->
+							access = alevel.level
+							alevel.users.forEach (uname)->
+								rusrs.push { "name": uname, "access": access }
+							# TODO: add configuration objects
+						repository = { "name": rname, "users": rusrs }
+						@repos.push repository
+						# Add users to users array if they don't already exist there
+						rusrs.forEach (user)->
+							ruser = fetchUser user.name
+							if ruser is null
+								# Instantiate the new object
+								ruser =
+									name: user.name
+									access: []
+							else
+								# Remove element from array
+								
+
+
+
+				catch (e)
+					# Parse error
+					throw 'Parse error: '+e.message
+				# Now attempt to read in the user keyfiles and append them as necessary to the users array
+				fs.readdir keys,(err,files)->
+					if err
+						throw err
+					files.forEach (file)->
+						fs.readFile file, (err,data)->
+							if err
+								throw err
+							# Append key contents (data) to user named file
+							# TODO
+
+					# We're done. Call the callback function
+					callback()
+			@
+
+
+
+
 		reload: (callback)->
 			# reload from server
+			exec "git pull .", {cwd: @location},(err, stdout, stderr)=>
+				if stderr
+					# There were problems
+					throw "reload failed"
+				
+				# Now populate models
+				populateModels(callback)
+				@dirty = false
+			@
+
+
 			# Initialize repo
 			git.repo @options.address,(err,repo)=>
 				if err
@@ -85,16 +164,17 @@ module.exports = ->
 		commit: (callback)->
 			# Commit changes to the server
 			if @dirty is true
-				# Do the commit
+				# Do the commit TODO
+
 				@dirty = false
 				callback(null)
 			else
 				# Terminate immediately
-				callback(new GitonodeErr(100,"No changes to commit"))
+				throw "No changes to commit"
 			@
 
 
-
+		###
 		addGroup: (group)->
 			if group instanceof GitonodeGroup
 				@groups.push group
@@ -197,3 +277,4 @@ module.exports = ->
 				@allGroup = if permission then permission else "R"
 			else
 				false
+	###
